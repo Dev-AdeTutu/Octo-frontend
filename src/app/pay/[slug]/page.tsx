@@ -21,6 +21,7 @@ import {
 import { usdcForNetwork } from "@/lib/network";
 import { network } from "@/lib/network";
 import { buildUnsignedPayment, assertNetworkConsistency } from "@/lib/sdk";
+import { assertSignedMatchesBuilt } from "@/lib/sdk/signedTxCheck";
 import { OctoSpinner } from "@/components/OctoSpinner";
 import { PayerPrivacyNotice } from "@/components/checkout/PayerPrivacyNotice";
 import confetti from "canvas-confetti";
@@ -385,6 +386,7 @@ export default function PayPage({
       if (signed.error || !signed.signedTxXdr) {
         throw new Error("Freighter did not return a signed transaction.");
       }
+      assertSignedMatchesBuilt(unsignedXdr, signed.signedTxXdr, info.network_passphrase);
 
       const result = await submitPublicPayment(slug, signed.signedTxXdr, intent.payment_id);
       if (result.status === "confirmed") {
