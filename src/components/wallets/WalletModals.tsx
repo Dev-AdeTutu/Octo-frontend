@@ -355,12 +355,6 @@ export function WithdrawModal({
     return { stroops: parsed.stroops };
   }
 
-  function checkedFeeStroops(): bigint {
-    const checked = validate();
-    if ("error" in checked) return BigInt(0);
-    return checked.stroops;
-  }
-
   async function proceedToReview() {
     setError(null);
     const checked = validate();
@@ -470,7 +464,7 @@ export function WithdrawModal({
             });
           }
         }
-      } catch (e) {
+      } catch {
         // ignore decode errors
       }
       setPendingXdr(signedXdr);
@@ -657,8 +651,6 @@ export function WithdrawModal({
 
 
   if (reviewed && !pendingXdr) {
-    const checked = validate();
-    const stroops = "stroops" in checked ? checked.stroops : BigInt(0);
     return (
       <Modal title="Review withdrawal" onClose={() => { setReviewed(false); setError(null); }}>
         <p className="text-sm text-muted">

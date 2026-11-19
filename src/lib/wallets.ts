@@ -6,7 +6,6 @@ import { apiFetch, path } from "./api";
 import { parseAmount, toApiStroops } from "./amount";
 import { pageQuery, type Paginated, type PageOpts } from "./pagination";
 import { fetchAllPages } from "./csv";
-import { network } from "./network";
 export { usdcForNetwork } from "./network";
 
 export type { Paginated, PageOpts } from "./pagination";

@@ -7,7 +7,6 @@ import { signup, login, verifyEmail, resendOtp, needsVerification, needsTwoFacto
 import { errorMessage } from "@/lib/api";
 import { safeNextPath } from "@/lib/safeNext";
 import { assessPassword, MIN_PASSWORD_SCORE } from "@/lib/passwordStrength";
-import { PasswordStrengthMeter } from "@/lib/passwordStrength";
 import { OtpInput } from "./OtpInput";
 
 type Mode = "signup" | "login";
