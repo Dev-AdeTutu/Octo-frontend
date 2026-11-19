@@ -79,9 +79,10 @@ export function TrustlineModal({
     const ok = result.status === "confirmed";
     return (
       <Modal title="USDC trustline" onClose={onDone}>
-        <div className="text-center">
+        <div className="text-center" role="status">
           <p className={`text-3xl ${ok ? "text-burgundy-bright" : "text-warning"}`}>
-            {ok ? "✓" : "!"}
+            <span aria-hidden="true">{ok ? "✓" : "!"}</span>
+            <span className="sr-only">{ok ? "Success" : "Failed"}</span>
           </p>
           <p className="mt-2 font-medium capitalize text-foreground">
             {ok ? "Trustline established" : result.status}
@@ -547,9 +548,10 @@ export function WithdrawModal({
     const finish = () => onDone();
     return (
       <Modal title="Withdrawal" onClose={finish}>
-        <div className="text-center">
+        <div className="text-center" role="status">
           <p className={`text-3xl ${ok ? "text-burgundy-bright" : "text-warning"}`}>
-            {ok ? "✓" : "!"}
+            <span aria-hidden="true">{ok ? "✓" : "!"}</span>
+            <span className="sr-only">{ok ? "Success" : "Failed"}</span>
           </p>
           <p className="mt-2 font-medium capitalize text-foreground">
             {result.status}
@@ -724,8 +726,11 @@ export function WithdrawModal({
   if (pendingXdr && expired) {
     return (
       <Modal title="Withdrawal expired" onClose={onClose}>
-        <div className="text-center">
-          <p className="text-3xl text-warning">!</p>
+        <div className="text-center" role="status">
+          <p className="text-3xl text-warning">
+            <span aria-hidden="true">!</span>
+            <span className="sr-only">Expired</span>
+          </p>
           <p className="mt-2 text-sm text-muted">
             For your security, a signed withdrawal is only valid for{" "}
             {Math.round(TX_TIMEOUT_SECONDS / 60)} minutes, and this one ran out before
