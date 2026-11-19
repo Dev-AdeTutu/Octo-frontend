@@ -18,6 +18,7 @@ export type CreateWalletResponse = {
   address: string;
   custody: string;
   funded: boolean;
+  backup_version?: string | null;
 };
 
 export type WalletView = {
