@@ -11,7 +11,7 @@ import { Keypair } from "@stellar/stellar-base";
 import { decryptSeed } from "./crypto";
 import { fromMnemonic } from "./keys";
 import { getBackup } from "./client";
-import { loadLocalBackup, saveLocalBackup } from "./store";
+import { loadLocalBackup, saveLocalBackup, versionOf } from "./store";
 import { parseBackup } from "./crypto";
 
 export const MISSING_BACKUP_ERROR =
@@ -62,7 +62,7 @@ export async function unlockWallet(
     throw new Error(MISSING_BACKUP_ERROR);
   }
 
-  const serverVersion = remote.backup_version ?? remote.encrypted_backup;
+  const serverVersion = versionOf(remote);
   const localVersion = local?.version ?? "";
 
   if (!local || serverVersion !== localVersion) {

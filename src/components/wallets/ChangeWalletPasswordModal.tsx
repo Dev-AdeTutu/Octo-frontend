@@ -13,6 +13,7 @@ import {
   loadLocalBackup,
   getBackup,
   parseBackup,
+  versionOf,
 } from "@/lib/sdk";
 import { fromMnemonic } from "@/lib/sdk/keys";
 import { assessPassword, PasswordStrengthMeter, MIN_PASSWORD_LENGTH, type PasswordAssessment } from "@/lib/passwordStrength";
@@ -78,7 +79,7 @@ export function ChangeWalletPasswordModal({
     if (!remote || !remote.encrypted_backup) {
       throw new Error("No backup found for this wallet. Recover it with your recovery phrase first.");
     }
-    const serverVersion = remote.backup_version ?? remote.encrypted_backup;
+    const serverVersion = versionOf(remote);
     if (!local || serverVersion !== local.version) {
       const parsed = parseBackup(remote.encrypted_backup);
       saveLocalBackup(walletId, parsed, serverVersion);

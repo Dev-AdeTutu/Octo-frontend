@@ -36,7 +36,7 @@ export {
 } from "./client";
 export type { SubmitResult } from "./client";
 
-export { saveLocalBackup, loadLocalBackup, clearLocalBackups } from "./store";
+export { saveLocalBackup, loadLocalBackup, clearLocalBackups, versionOf } from "./store";
 
 export { unlockWallet } from "./unlock";
 
