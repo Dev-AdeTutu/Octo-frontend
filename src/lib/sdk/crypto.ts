@@ -18,6 +18,14 @@ const NONCE_BYTES = 12;
 
 const MALFORMED_BACKUP = "Malformed or unrecognized backup.";
 
+/** Thrown by `decryptSeed` when the password is wrong (or the ciphertext was tampered with). */
+export class WrongPasswordError extends Error {
+  constructor() {
+    super("Incorrect password or corrupted backup.");
+    this.name = "WrongPasswordError";
+  }
+}
+
 export type EncryptedBackup = {
   /** Format version, for forward-compatibility. */
   v: 1;
@@ -110,7 +118,7 @@ export async function decryptSeed(
       fromB64(backup.ciphertext),
     );
   } catch {
-    throw new Error("Incorrect password or corrupted backup.");
+    throw new WrongPasswordError();
   }
   return new TextDecoder().decode(plain);
 }

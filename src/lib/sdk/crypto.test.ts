@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { decryptSeed, parseBackup, type EncryptedBackup } from './crypto';
+import { decryptSeed, encryptSeed, parseBackup, WrongPasswordError, type EncryptedBackup } from './crypto';
 
 const VALID_SALT = new Uint8Array(16).fill(1);
 const VALID_NONCE = new Uint8Array(12).fill(2);
@@ -70,5 +70,12 @@ describe('decryptSeed parameter validation', () => {
     await expect(
       decryptSeed(make({ ciphertext: toBase64(new Uint8Array(4096)) }), 'pw'),
     ).rejects.toThrow();
+  });
+});
+
+describe('WrongPasswordError', () => {
+  it('is thrown by decryptSeed for a wrong password', async () => {
+    const backup = await encryptSeed('some mnemonic words', 'right-password');
+    await expect(decryptSeed(backup, 'wrong-password')).rejects.toBeInstanceOf(WrongPasswordError);
   });
 });

@@ -11,7 +11,7 @@
 export { generateWallet, fromMnemonic, keypairFromRawSeed } from "./keys";
 export type { WalletKeys } from "./keys";
 
-export { encryptSeed, decryptSeed, serializeBackup, parseBackup } from "./crypto";
+export { encryptSeed, decryptSeed, serializeBackup, parseBackup, WrongPasswordError } from "./crypto";
 export type { EncryptedBackup } from "./crypto";
 
 export {
