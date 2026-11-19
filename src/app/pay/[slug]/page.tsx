@@ -1,6 +1,5 @@
 "use client";
 
-import { formatCountdownMs } from "@/lib/format";
 import { use, useCallback, useEffect, useRef, useState } from "react";
 import { Logo } from "@/components/Logo";
 import { CopyButton } from "@/components/CopyButton";
@@ -21,6 +20,7 @@ import {
 import { usdcForNetwork } from "@/lib/network";
 import { network } from "@/lib/network";
 import { buildUnsignedPayment, assertNetworkConsistency } from "@/lib/sdk";
+import { assertSignedMatchesBuilt } from "@/lib/sdk/signedTxCheck";
 import { OctoSpinner } from "@/components/OctoSpinner";
 import { PayerPrivacyNotice } from "@/components/checkout/PayerPrivacyNotice";
 import confetti from "canvas-confetti";
@@ -30,6 +30,7 @@ import { ApiError, errorMessage } from "@/lib/api";
 import { friendlyResultMessage } from "@/lib/stellar/resultCodes";
 import { isTrustedImageUrl } from "@/lib/isTrustedImageUrl";
 import { validateRedirectUrl } from "@/lib/redirectUrl";
+import { formatCountdownMs } from "@/lib/format";
 
 type Step = "loading" | "not-found" | "error" | "form" | "pay" | "confirmed";
 
@@ -41,6 +42,15 @@ const MAX_POLL_MS = 30 * 60_000;
 
 /** Warn the payer once this much time is left before the intent expires. */
 const EXPIRY_WARNING_MS = 2 * 60_000;
+
+/** Minimum flexible amount in USD, used when the link doesn't specify one. */
+const MIN_FLEXIBLE_USD = 0.01;
+
+/** Minimum flexible amount in stroops (1 USDC = 10,000,000 stroops). */
+const MIN_FLEXIBLE_USD_STROOPS = Math.round(MIN_FLEXIBLE_USD * 10_000_000);
+
+/** Human-readable minimum for error copy. */
+const MIN_FLEXIBLE_USD_LABEL = `$${MIN_FLEXIBLE_USD.toFixed(2)}`;
 
 // Status poll interval, backing off 3s → 5s → 10s the longer the payer waits.
 function pollDelayMs(elapsedMs: number) {
@@ -54,13 +64,12 @@ function intentInputsKey(amountUsdcStroops: number, name: string, email: string)
   return JSON.stringify([amountUsdcStroops, name, email.toLowerCase()]);
 }
 
-// Formats a millisecond countdown as m:ss (or h:mm:ss past an hour) for the payer.
 function celebrate() {
-  confetti({ 
-    particleCount: 140, 
-    spread: 80, 
+  confetti({
+    particleCount: 140,
+    spread: 80,
     origin: { y: 0.6 },
-    disableForReducedMotion: true 
+    disableForReducedMotion: true,
   });
 }
 
@@ -93,6 +102,33 @@ function isStellarTxHash(value: string | null | undefined): value is string {
 function shortenHash(hash: string) {
   if (hash.length <= 16) return hash;
   return `${hash.slice(0, 8)}…${hash.slice(-8)}`;
+}
+
+// Resolves the min/max flexible bounds for a link, falling back to the client-side minimum.
+function flexibleBounds(link: PublicPaymentLink) {
+  const min =
+    typeof link.min_amount_usdc_stroops === "number" && link.min_amount_usdc_stroops > 0
+      ? link.min_amount_usdc_stroops
+      : MIN_FLEXIBLE_USD_STROOPS;
+  const max =
+    typeof link.max_amount_usdc_stroops === "number" && link.max_amount_usdc_stroops > 0
+      ? link.max_amount_usdc_stroops
+      : null;
+  return { min, max };
+}
+
+// Returns an error message for an out-of-bounds flexible amount, or null when it's acceptable.
+function validateFlexibleAmount(
+  amountUsdcStroops: number,
+  bounds: { min: number; max: number | null },
+): string | null {
+  if (amountUsdcStroops < bounds.min) {
+    return `Enter at least $${formatStroops(bounds.min)}.`;
+  }
+  if (bounds.max !== null && amountUsdcStroops > bounds.max) {
+    return `Enter at most $${formatStroops(bounds.max)}.`;
+  }
+  return null;
 }
 
 export default function PayPage({
@@ -364,6 +400,15 @@ export default function PayPage({
         setSubmitting(false);
         return;
       }
+      // Flexible links must respect the min/max bounds; the backend enforces the same limit.
+      if (link.amount_usdc_stroops === null) {
+        const boundsError = validateFlexibleAmount(amountUsdcStroops, flexibleBounds(link));
+        if (boundsError) {
+          setError(boundsError);
+          setSubmitting(false);
+          return;
+        }
+      }
       // Reuse the intent only if nothing changed; otherwise the deposit address would carry a stale amount.
       const key = intentInputsKey(amountUsdcStroops, payerName.trim(), payerEmail.trim());
       if (intentRef.current && intentRef.current.key === key) {
@@ -425,6 +470,7 @@ export default function PayPage({
       if (signed.error || !signed.signedTxXdr) {
         throw new Error("Freighter did not return a signed transaction.");
       }
+      assertSignedMatchesBuilt(unsignedXdr, signed.signedTxXdr, info.network_passphrase);
 
       const result = await submitPublicPayment(slug, signed.signedTxXdr, intent.payment_id);
       if (result.status === "confirmed") {
@@ -440,6 +486,16 @@ export default function PayPage({
       setFreighterBusy(false);
     }
   }
+
+  // Inline validation for the flexible amount input.
+  const amountStroops = amount.trim() !== "" ? usdAmountToStroops(amount) : null;
+  const amountBounds = link ? flexibleBounds(link) : { min: MIN_FLEXIBLE_USD_STROOPS, max: null };
+  const amountFormatError = amount.trim() !== "" && amountStroops === null;
+  const amountBoundsError =
+    amountStroops !== null ? validateFlexibleAmount(amountStroops, amountBounds) : null;
+  const amountError = amountFormatError
+    ? "Enter an amount in USD, up to 7 decimal places."
+    : amountBoundsError;
 
   return (
     <div className="flex min-h-screen items-center justify-center bg-background px-4 py-12">
@@ -531,13 +587,14 @@ export default function PayPage({
                     value={amount}
                     onChange={(e) => setAmount(e.target.value)}
                     inputMode="decimal"
-                    aria-invalid={amount.trim() !== "" && usdAmountToStroops(amount) === null}
+                    aria-invalid={amountError !== null}
+                    aria-describedby={amountError !== null ? "payer-amount-error" : undefined}
                     placeholder="0.00"
                     className="w-full rounded-lg border border-gray-300 px-3 py-2.5 text-sm text-gray-900 outline-none focus:border-black"
                   />
-                  {amount.trim() !== "" && usdAmountToStroops(amount) === null && (
-                    <p role="alert" className="mt-1 text-xs text-red-600">
-                      Enter an amount in USD, up to 7 decimal places.
+                  {amountError !== null && (
+                    <p id="payer-amount-error" role="alert" className="mt-1 text-xs text-red-600">
+                      {amountError}
                     </p>
                   )}
                 </Field>
@@ -595,7 +652,8 @@ export default function PayPage({
                 {submitting ? "Please wait…" : "Continue"}
               </button>
               <p className="text-center text-[11px] text-gray-400">
-                🔒 Secure and encrypted payment.
+                Payments settle on the Stellar network. Octo never asks for your wallet&apos;s
+                secret key.
               </p>
             </form>
           )}
@@ -622,7 +680,7 @@ export default function PayPage({
                   disabled={freighterBusy}
                   className="text-xs font-medium text-gray-500 hover:text-gray-900 disabled:opacity-50"
                 >
-                  ‹ Back
+                  <span aria-hidden="true">‹ </span>Back
                 </button>
               </div>
 
@@ -634,9 +692,18 @@ export default function PayPage({
                       : "border-gray-200 bg-gray-50 text-gray-600"
                   }`}
                 >
-                  {remainingMs <= EXPIRY_WARNING_MS
-                    ? `⚠️ Less than ${formatCountdownMs(remainingMs)} left — complete your payment now or it will expire.`
-                    : `⏳ Time remaining to pay: ${formatCountdownMs(remainingMs)}`}
+                  {remainingMs <= EXPIRY_WARNING_MS ? (
+                    <>
+                      <span aria-hidden="true">⚠️ </span>
+                      Less than {formatCountdownMs(remainingMs)} left — complete your payment now
+                      or it will expire.
+                    </>
+                  ) : (
+                    <>
+                      <span aria-hidden="true">⏳ </span>
+                      Time remaining to pay: {formatCountdownMs(remainingMs)}
+                    </>
+                  )}
                 </div>
               )}
 
@@ -710,7 +777,7 @@ export default function PayPage({
                   className="mt-2 flex w-full items-center justify-center gap-2 rounded-lg border border-gray-300 py-2.5 text-sm font-medium text-gray-900 transition-colors hover:border-black disabled:opacity-50"
                 >
                   {freighterBusy && <OctoSpinner size={16} />}
-                  {freighterBusy ? "Connecting…" : "🦄 Connect Freighter"}
+                  {freighterBusy ? "Connecting…" : "Connect Freighter"}
                 </button>
               </div>
               )}
@@ -726,8 +793,14 @@ export default function PayPage({
           )}
 
           {step === "confirmed" && (
-            <div className="flex h-full flex-col items-center justify-center text-center">
-              <p className="text-3xl">✅</p>
+            <div
+              role="status"
+              className="flex h-full flex-col items-center justify-center text-center"
+            >
+              <p className="text-3xl">
+                <span aria-hidden="true">✅</span>
+                <span className="sr-only">Success</span>
+              </p>
               <p className="mt-3 text-lg font-semibold text-gray-900">Payment received</p>
               <p className="mt-2 text-sm text-gray-500">
                 Thank you{payerName ? `, ${payerName}` : ""} — your payment has been
@@ -859,8 +932,14 @@ function MismatchBanner({
   }[status.status as "expired" | "underpaid" | "overpaid"];
 
   return (
-    <div className="flex h-full flex-col items-center justify-center text-center">
-      <p className="text-3xl">⚠️</p>
+    <div
+      role="status"
+      className="flex h-full flex-col items-center justify-center text-center"
+    >
+      <p className="text-3xl">
+        <span aria-hidden="true">⚠️</span>
+        <span className="sr-only">Warning</span>
+      </p>
       <p className="mt-3 text-lg font-semibold text-gray-900">{copy.title}</p>
       <p className="mt-2 max-w-xs text-sm text-gray-500">{copy.body}</p>
       <button
@@ -868,7 +947,7 @@ function MismatchBanner({
         onClick={onBack}
         className="mt-5 rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-900 hover:border-black"
       >
-        ‹ Back
+        <span aria-hidden="true">‹ </span>Back
       </button>
     </div>
   );

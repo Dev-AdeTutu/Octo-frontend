@@ -3,7 +3,7 @@
 import { errorMessage } from "@/lib/api";
 import { useRef, useState } from "react";
 import { toast } from "sonner";
-import { getBackup, loadLocalBackup, parseBackup, saveLocalBackup, decryptSeed, fromMnemonic } from "@/lib/sdk";
+import { getBackup, loadLocalBackup, parseBackup, serializeBackup, saveLocalBackup, decryptSeed, fromMnemonic } from "@/lib/sdk";
 import { downloadBlob } from "@/lib/csv";
 
 /** Export the encrypted backup as a .json file, or re-import one into this browser. */
@@ -72,7 +72,7 @@ export function DownloadBackupButton({
         throw new Error("This backup does not belong to this wallet.");
       }
 
-      saveLocalBackup(walletId, backup);
+      saveLocalBackup(walletId, backup, serializeBackup(backup));
       toast.success("Backup imported. Unlock with your wallet password to use it.");
     } catch (err) {
       toast.error(errorMessage(err, "Could not import the backup file."));
