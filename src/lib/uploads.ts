@@ -3,6 +3,7 @@
 "use client";
 
 import { apiFetch } from "./api";
+import { assertCloudinaryResultUrl, assertValidCloudName } from "./uploadUrlValidation";
 
 type UploadSignature = {
   cloud_name: string;
@@ -11,6 +12,8 @@ type UploadSignature = {
   folder: string;
   signature: string;
 };
+
+type CloudinaryUploadResponse = { secure_url?: string };
 
 /**
  * Upload `file` to Cloudinary and return its secure URL.
@@ -22,6 +25,9 @@ type UploadSignature = {
 export async function uploadImage(token: string, file: File): Promise<string> {
   const sig = await apiFetch<UploadSignature>("/v1/uploads/signature", { token });
 
+  assertValidCloudName(sig.cloud_name);
+  const cloudName = encodeURIComponent(sig.cloud_name);
+
   const form = new FormData();
   form.append("file", file);
   form.append("api_key", sig.api_key);
@@ -30,7 +36,7 @@ export async function uploadImage(token: string, file: File): Promise<string> {
   form.append("signature", sig.signature);
 
   const res = await fetch(
-    `https://api.cloudinary.com/v1_1/${sig.cloud_name}/image/upload`,
+    `https://api.cloudinary.com/v1_1/${cloudName}/image/upload`,
     { method: "POST", body: form },
   );
   if (!res.ok) {
@@ -42,9 +48,8 @@ export async function uploadImage(token: string, file: File): Promise<string> {
     }
     throw new Error(detail || `Image upload failed (${res.status})`);
   }
-  const body = await res.json();
-  if (!body.secure_url) throw new Error("Upload succeeded but returned no URL.");
-  return body.secure_url as string;
+  const body = (await res.json()) as CloudinaryUploadResponse;
+  return assertCloudinaryResultUrl(body?.secure_url, sig.cloud_name);
 }
 
 export const ALLOWED_IMAGE_TYPES = ['image/png', 'image/jpeg', 'image/webp', 'image/gif'] as const;
