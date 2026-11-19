@@ -47,3 +47,20 @@ describe("uploadImage URL validation", () => {
     await expect(uploadImage("t", file)).resolves.toContain("/demo/");
   });
 });
+
+describe("uploadImage timeout", () => {
+  it("times out with a friendly message when fetch never resolves", async () => {
+    mockCloud.name = "demo";
+    vi.useFakeTimers();
+    vi.stubGlobal("fetch", (_u: string, init: RequestInit) =>
+      new Promise((_res, rej) =>
+        init.signal!.addEventListener("abort", () => rej(init.signal!.reason)),
+      ),
+    );
+    const p = uploadImage("t", file, { timeoutMs: 50 });
+    const assertion = expect(p).rejects.toThrow(/timed out/);
+    await vi.advanceTimersByTimeAsync(60);
+    await assertion;
+    vi.useRealTimers();
+  });
+});

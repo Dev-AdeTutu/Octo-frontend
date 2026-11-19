@@ -13,6 +13,8 @@ type UploadSignature = {
   signature: string;
 };
 
+const UPLOAD_TIMEOUT_MS = 60_000;
+
 type CloudinaryUploadResponse = { secure_url?: string };
 
 /**
@@ -22,8 +24,14 @@ type CloudinaryUploadResponse = { secure_url?: string };
  * go straight to Cloudinary rather than through the Octo API. Only params covered by the
  * signature may be sent — adding others makes Cloudinary reject the upload.
  */
-export async function uploadImage(token: string, file: File): Promise<string> {
-  const sig = await apiFetch<UploadSignature>("/v1/uploads/signature", { token });
+export async function uploadImage(
+  token: string,
+  file: File,
+  options: { signal?: AbortSignal; timeoutMs?: number } = {},
+): Promise<string> {
+  const timeoutSignal = AbortSignal.timeout(options.timeoutMs ?? UPLOAD_TIMEOUT_MS);
+  const signal = options.signal ? AbortSignal.any([options.signal, timeoutSignal]) : timeoutSignal;
+  const sig = await apiFetch<UploadSignature>("/v1/uploads/signature", { token, signal });
 
   assertValidCloudName(sig.cloud_name);
   const cloudName = encodeURIComponent(sig.cloud_name);
@@ -35,10 +43,19 @@ export async function uploadImage(token: string, file: File): Promise<string> {
   form.append("folder", sig.folder);
   form.append("signature", sig.signature);
 
-  const res = await fetch(
-    `https://api.cloudinary.com/v1_1/${cloudName}/image/upload`,
-    { method: "POST", body: form },
-  );
+  let res: Response;
+  try {
+    res = await fetch(`https://api.cloudinary.com/v1_1/${cloudName}/image/upload`, {
+      method: "POST",
+      body: form,
+      signal,
+    });
+  } catch (err) {
+    if (err instanceof DOMException && err.name === "TimeoutError") {
+      throw new Error("Image upload timed out. Try again or use a smaller image.");
+    }
+    throw err;
+  }
   if (!res.ok) {
     let detail = "";
     try {
