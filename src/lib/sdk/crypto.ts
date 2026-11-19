@@ -98,6 +98,7 @@ export async function decryptSeed(
   backup: EncryptedBackup,
   password: string,
 ): Promise<string> {
+  assertValidBackup(backup);
   const salt = fromB64(backup.salt);
   const nonce = fromB64(backup.nonce);
   const key = await deriveKey(password, salt, backup.iter);
@@ -119,33 +120,48 @@ export function serializeBackup(backup: EncryptedBackup): string {
   return JSON.stringify(backup);
 }
 
-/** Parse a backup blob string; throws if malformed or if KDF parameters are out of range. */
-export function parseBackup(s: string): EncryptedBackup {
-  let b: EncryptedBackup;
-  try {
-    b = JSON.parse(s) as EncryptedBackup;
-  } catch {
+/** AES-GCM tag (16 bytes) plus bounds for a mnemonic of up to 24 words. */
+const MIN_CIPHERTEXT_BYTES = 17;
+const MAX_CIPHERTEXT_BYTES = 1024;
+
+/** Validate KDF parameters and field sizes; throws on anything out of range. */
+export function assertValidBackup(b: unknown): asserts b is EncryptedBackup {
+  const x = b as EncryptedBackup | null;
+  if (!x || typeof x !== "object" || x.v !== 1 || x.kdf !== "PBKDF2-SHA256") {
     throw new Error(MALFORMED_BACKUP);
   }
-  if (!b || typeof b !== "object" || b.v !== 1 || b.kdf !== "PBKDF2-SHA256") {
+  if (typeof x.iter !== "number" || !Number.isInteger(x.iter) || x.iter < MIN_ITERATIONS || x.iter > MAX_ITERATIONS) {
     throw new Error(MALFORMED_BACKUP);
   }
-  if (typeof b.iter !== "number" || !Number.isInteger(b.iter) || b.iter < MIN_ITERATIONS || b.iter > MAX_ITERATIONS) {
-    throw new Error(MALFORMED_BACKUP);
-  }
-  if (typeof b.salt !== "string" || typeof b.nonce !== "string" || typeof b.ciphertext !== "string") {
+  if (typeof x.salt !== "string" || typeof x.nonce !== "string" || typeof x.ciphertext !== "string") {
     throw new Error(MALFORMED_BACKUP);
   }
   let salt: Uint8Array;
   let nonce: Uint8Array;
+  let ct: Uint8Array;
   try {
-    salt = fromB64(b.salt);
-    nonce = fromB64(b.nonce);
+    salt = fromB64(x.salt);
+    nonce = fromB64(x.nonce);
+    ct = fromB64(x.ciphertext);
   } catch {
     throw new Error(MALFORMED_BACKUP);
   }
   if (salt.length !== SALT_BYTES || nonce.length !== NONCE_BYTES) {
     throw new Error(MALFORMED_BACKUP);
   }
+  if (ct.length < MIN_CIPHERTEXT_BYTES || ct.length > MAX_CIPHERTEXT_BYTES) {
+    throw new Error(MALFORMED_BACKUP);
+  }
+}
+
+/** Parse a backup blob string; throws if malformed or if KDF parameters are out of range. */
+export function parseBackup(s: string): EncryptedBackup {
+  let b: unknown;
+  try {
+    b = JSON.parse(s);
+  } catch {
+    throw new Error(MALFORMED_BACKUP);
+  }
+  assertValidBackup(b);
   return b;
 }
