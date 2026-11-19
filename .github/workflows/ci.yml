@@ -37,6 +37,9 @@ jobs:
 
       # --frozen-lockfile fails the build on lockfile drift rather than silently resolving a
       # different dependency tree than the one that was reviewed.
+      - name: Guard against non-pnpm lockfiles
+        run: test ! -f package-lock.json && test ! -f yarn.lock
+
       - name: Install
         run: pnpm install --frozen-lockfile
 
