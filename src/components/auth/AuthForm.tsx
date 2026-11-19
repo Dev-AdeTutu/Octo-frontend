@@ -6,7 +6,6 @@ import { toast } from "sonner";
 import { signup, login, verifyEmail, resendOtp, needsVerification, needsTwoFactor, saveToken, verify2fa } from "@/lib/auth";
 import { errorMessage } from "@/lib/api";
 import { assessPassword, MIN_PASSWORD_SCORE } from "@/lib/passwordStrength";
-import { PasswordStrengthMeter } from "@/lib/passwordStrength";
 import { OtpInput } from "./OtpInput";
 
 type Mode = "signup" | "login";
